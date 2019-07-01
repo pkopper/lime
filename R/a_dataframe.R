@@ -123,22 +123,45 @@ explain.data.frame <- function(x, explainer, labels = NULL, n_labels = NULL,
   case_perm <- permute_cases(x, n_permutations, explainer$feature_distribution,
                              explainer$bin_continuous, explainer$bin_cuts,
                              explainer$use_density)
-  case_res <- predict_model(explainer$model, explainer$preprocess(case_perm), type = o_type, ...)
+  case_res <- predict_model(explainer$model, explainer$preprocess(case_perm), 
+                            type = o_type, ...)
   case_res <- set_labels(case_res, explainer$model)
-  case_ind <- split(seq_len(nrow(case_perm)), rep(seq_len(nrow(x)), each = n_permutations))
+  case_ind <- split(seq_len(nrow(case_perm)), rep(seq_len(nrow(x)), 
+                                                  each = n_permutations))
   res <- lapply(seq_along(case_ind), function(ind) {
     i <- case_ind[[ind]]
+    perms <- numerify(case_perm[i, ], explainer$feature_type, 
+                      explainer$bin_continuous, explainer$bin_cuts)
+    perms <- feature_scale(perms, 
+                           explainer$feature_distribution, 
+                           explainer$feature_type, 
+                           explainer$bin_continuous)
     if (dist_fun == 'gower') {
-      sim <- 1 - (gower_dist(case_perm[i[1], , drop = FALSE], case_perm[i, , drop = FALSE])) ^ gower_pow
+      catvars <- explainer$feature_type != "numeric"
+      numvars <- explainer$feature_type == "numeric"
+      d2 <- (perms[ , numvars, drop = FALSE] -
+               matrix(rep(as.numeric(perms[1, numvars, drop = FALSE]), 
+                          nrow(perms)), nrow = nrow(perms), byrow = T))^2
+      d2 <- apply(d2, 1, sum)
+      d0 <- (perms[ , catvars, drop = FALSE] !=
+               matrix(rep(as.numeric(perms[1, catvars, drop = FALSE]), 
+                          nrow(perms)), nrow = nrow(perms), byrow = T))
+      d0 <- apply(d0, 1, sum)
+      d <- d2 + d0 # as recommended by Huang (1997) because of scaling 
+      # (lambda = 1 = average sd of all num. features)
+      sim <- kernel(d)
     }
-    perms <- numerify(case_perm[i, ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
     if (dist_fun != 'gower') {
-      sim <- kernel(c(0, dist(feature_scale(perms, explainer$feature_distribution, explainer$feature_type, explainer$bin_continuous),
-                        method = dist_fun)[seq_len(n_permutations-1)]))
+      sim <- kernel(c(0, dist(perms, 
+                              method = dist_fun)[seq_len(n_permutations - 1)]))
     }
-    res <- model_permutations(as.matrix(perms), case_res[i, , drop = FALSE], sim, labels, n_labels, n_features, feature_select)
+    res <- model_permutations(as.matrix(perms), case_res[i, , drop = FALSE], 
+                              sim, labels, n_labels, n_features, feature_select)
     res$feature_value <- unlist(case_perm[i[1], res$feature])
-    res$feature_desc <- describe_feature(res$feature, case_perm[i[1], ], explainer$feature_type, explainer$bin_continuous, explainer$bin_cuts)
+    res$feature_desc <- describe_feature(res$feature, case_perm[i[1], ], 
+                                         explainer$feature_type, 
+                                         explainer$bin_continuous, 
+                                         explainer$bin_cuts)
     guess <- which.max(abs(case_res[i[1], ]))
     res$case <- rownames(x)[ind]
     res$label_prob <- unname(as.matrix(case_res[i[1], ]))[match(res$label, colnames(case_res))]
