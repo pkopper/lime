@@ -147,7 +147,8 @@ explain.data.frame <- function(x, explainer, labels = NULL, n_labels = NULL,
                matrix(rep(as.numeric(perms[1, catvars, drop = FALSE]), 
                           nrow(perms)), nrow = nrow(perms), byrow = T))
       d0 <- apply(d0, 1, sum)
-      d <- d2 + d0 # as recommended by Huang (1997) because of scaling 
+      d <- (d2 + d0) / ncol(perms) 
+      # as recommended by Huang (1997) because of scaling 
       # (lambda = 1 = average sd of all num. features)
       sim <- kernel(d)
     }
